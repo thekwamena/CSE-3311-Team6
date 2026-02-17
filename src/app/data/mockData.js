@@ -1,0 +1,138 @@
+export const mockListings = [
+  {
+    id: "1",
+    title: "Biology: A Global Approach (12th Edition)",
+    description:
+      "Like new condition, only used for one semester. No highlighting or notes. Perfect for BIO 101.",
+    price: 45,
+    category: "Books",
+    images: [
+      "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=800&q=80",
+    ],
+    seller: {
+      name: "Alex Thompson",
+      rating: 4.9,
+      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80",
+      verified: true,
+    },
+    distance: 0.3,
+    location: "Near UTA Library",
+  },
+  {
+    id: "2",
+    title: "Calculus Early Transcendentals",
+    description: "8th Edition, great condition. Used for MATH 1426.",
+    price: 65,
+    category: "Books",
+    images: [
+      "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=800&q=80",
+    ],
+    seller: {
+      name: "Sarah Kim",
+      rating: 5.0,
+      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80",
+      verified: true,
+    },
+    distance: 0.5,
+    location: "Engineering Building",
+  },
+  {
+    id: "3",
+    title: "MacBook Air M1 2020",
+    description: "8GB RAM, 256GB SSD. Excellent condition, barely used. Comes with charger.",
+    price: 650,
+    category: "Electronics",
+    images: [
+      "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&q=80",
+    ],
+    seller: {
+      name: "Marcus Chen",
+      rating: 4.8,
+      avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80",
+      verified: true,
+    },
+    distance: 1.2,
+    location: "Student Union",
+  },
+  {
+    id: "4",
+    title: "IKEA Desk with Drawer",
+    description: "White desk in great condition. Easy to disassemble for transport.",
+    price: 40,
+    category: "Furniture",
+    images: [
+      "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=800&q=80",
+    ],
+    seller: {
+      name: "Emily Rodriguez",
+      rating: 4.7,
+      avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&q=80",
+      verified: true,
+    },
+    distance: 0.8,
+    location: "Residence Hall",
+  },
+  {
+    id: "5",
+    title: "Chemistry: The Central Science",
+    description: "14th Edition. Some highlighting but still in good condition.",
+    price: 50,
+    category: "Books",
+    images: [
+      "https://images.unsplash.com/photo-1603126857599-f6e157fa2fe6?w=800&q=80",
+    ],
+    seller: {
+      name: "David Park",
+      rating: 4.9,
+      avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&q=80",
+      verified: true,
+    },
+    distance: 0.4,
+    location: "Science Building",
+  },
+  {
+    id: "6",
+    title: "iPad Pro 11-inch 2021",
+    description: "128GB, WiFi only. Includes Apple Pencil and keyboard case.",
+    price: 550,
+    category: "Electronics",
+    images: [
+      "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=800&q=80",
+    ],
+    seller: {
+      name: "Jessica Lee",
+      rating: 5.0,
+      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
+      verified: true,
+    },
+    distance: 0.6,
+    location: "Library",
+  },
+];
+
+export const mockMessages = [
+  {
+    id: "1",
+    sender: "user",
+    text: "Hi, is this still available?",
+    timestamp: "10:23 AM",
+  },
+  {
+    id: "2",
+    sender: "seller",
+    text: "Yes, it is! Are you interested?",
+    timestamp: "10:24 AM",
+  },
+  {
+    id: "3",
+    sender: "user",
+    text: "Yes! When can we meet?",
+    timestamp: "10:25 AM",
+  },
+  {
+    id: "4",
+    sender: "seller",
+    text: "How about 2 PM near the UTA Library tomorrow?",
+    timestamp: "10:26 AM",
+  },
+];
