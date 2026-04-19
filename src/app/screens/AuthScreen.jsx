@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
-import { Eye, EyeOff, GraduationCap, Check, AlertCircle, User, Upload } from "lucide-react";
+import { Eye, EyeOff, GraduationCap, AlertCircle, User, Upload, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "../context/AuthContext";
 
 export default function AuthScreen() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [activeTab, setActiveTab] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,52 +23,53 @@ export default function AuthScreen() {
       setEmailError("");
       return false;
     }
+
     if (!value.endsWith("@mavs.uta.edu")) {
       setEmailError("Must use UTA email (@mavs.uta.edu)");
       return false;
     }
+
     setEmailError("");
     return true;
   };
 
-  const handleEmailChange = (e) => {
-    const value = e.target.value;
-    setEmail(value);
-    setAuthError("");
-    validateEmail(value);
-  };
-
   const handleProfilePictureUpload = (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setAuthError("Image size must be less than 5MB");
-        return;
-      }
+    if (!file) {
+      return;
+    }
 
-      // Validate file type
-      if (!file.type.startsWith("image/")) {
+    if (file.size > 5 * 1024 * 1024) {
+      setAuthError("Image size must be less than 5MB");
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setAuthError("Please upload a valid image file");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const uploadedImage = typeof reader.result === "string" ? reader.result : null;
+
+      if (!uploadedImage) {
         setAuthError("Please upload a valid image file");
         return;
       }
 
-      // Create preview URL
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfilePicture(reader.result);
-        setAuthError("");
-      };
-      reader.readAsDataURL(file);
-    }
+      setProfilePicture(uploadedImage);
+      setAuthError("");
+    };
+    reader.readAsDataURL(file);
   };
 
-  const handleSignIn = async () => {
+  const handleSubmit = async () => {
     if (!validateEmail(email) || !password) {
+      setAuthError("Please provide a valid email and password.");
       return;
     }
 
-    // Additional validation for sign up
     if (activeTab === "signup") {
       if (!fullName.trim()) {
         setAuthError("Please enter your full name");
@@ -81,240 +84,155 @@ export default function AuthScreen() {
     setIsLoading(true);
     setAuthError("");
 
-    // Simulate API call
     setTimeout(() => {
       if (password === "wrong") {
         setAuthError("Authentication failed. Please check your credentials.");
         setIsLoading(false);
-      } else {
-        // Success - store user data in localStorage
-        if (activeTab === "signup") {
-          localStorage.setItem(
-            "userProfile",
-            JSON.stringify({
-              email,
-              fullName,
-              profilePicture,
-            })
-          );
-          toast.success("Account created successfully!");
-        }
-        navigate("/browse");
+        return;
       }
-    }, 1000);
+
+      const userProfile = {
+        email,
+        fullName: fullName.trim() || email.split("@")[0],
+        profilePicture,
+      };
+
+      login(userProfile);
+      toast.success(activeTab === "signup" ? "Account created." : "Welcome back.");
+      navigate("/browse");
+    }, 600);
   };
 
   const emailIsValid = email.endsWith("@mavs.uta.edu") && !emailError;
-
-  // Check if form is valid
   const isFormValid =
     emailIsValid &&
     password &&
-    (activeTab === "login" ||
-      (activeTab === "signup" && fullName.trim() && profilePicture));
+    (activeTab === "login" || (activeTab === "signup" && fullName.trim() && profilePicture));
 
   return (
-    <div className="min-h-screen bg-[#F4F6F9] flex items-center justify-center p-4">
-      {/* iPhone Frame */}
-      <div className="w-[393px] h-[852px] bg-white rounded-[60px] shadow-2xl overflow-hidden relative border-[14px] border-black">
-        {/* Notch */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[120px] h-[30px] bg-black rounded-b-3xl z-50" />
+    <div className="min-h-screen bg-gradient-to-br from-[#F8FAFC] via-[#EFF6FF] to-[#EEF2FF] px-4 py-8 sm:py-12">
+      <div className="mx-auto grid w-full max-w-6xl overflow-hidden rounded-3xl border border-[#E2E8F0] bg-white/90 shadow-2xl shadow-[#1D4ED8]/10 backdrop-blur lg:grid-cols-[1.15fr,1fr]">
+        <div className="relative hidden overflow-hidden bg-[#1E3A8A] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+          <div className="absolute -left-12 -top-12 h-52 w-52 rounded-full bg-white/10 blur-2xl" />
+          <div className="absolute -bottom-14 -right-12 h-60 w-60 rounded-full bg-[#60A5FA]/30 blur-2xl" />
 
-        {/* Content */}
-        <div className="h-full flex flex-col items-center justify-center px-8 bg-[#F4F6F9] overflow-y-auto">
-          {/* Logo */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="mb-8 text-center pt-12"
-          >
-            <div className="w-20 h-20 bg-[#2563EB] rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <GraduationCap className="w-10 h-10 text-white" />
+          <div className="relative z-10">
+            <div className="mb-8 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 ring-1 ring-white/20">
+              <GraduationCap className="h-8 w-8" />
             </div>
-            <h1 className="text-[28px] font-bold text-[#111827] mb-2">
-              MaverickMarket
-            </h1>
-            <p className="text-[13px] text-[#6B7280]">
-              Exclusive marketplace for UTA students
+            <h1 className="text-4xl font-bold leading-tight">MaverickMarket</h1>
+            <p className="mt-4 max-w-sm text-sm text-white/85">
+              The trusted UTA marketplace for verified student-to-student buying and selling.
             </p>
-          </motion.div>
+          </div>
 
-          {/* Segmented Control */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="w-full mb-8"
-          >
-            <div className="bg-white rounded-[12px] p-1 flex shadow-sm">
-              <button
-                onClick={() => {
-                  setActiveTab("login");
-                  setAuthError("");
-                }}
-                className={`flex-1 py-2.5 rounded-[10px] text-[16px] font-semibold transition-all duration-200 ${
-                  activeTab === "login"
-                    ? "bg-[#2563EB] text-white shadow-md"
-                    : "text-[#6B7280]"
-                }`}
-              >
-                Login
-              </button>
-              <button
-                onClick={() => {
-                  setActiveTab("signup");
-                  setAuthError("");
-                }}
-                className={`flex-1 py-2.5 rounded-[10px] text-[16px] font-semibold transition-all duration-200 ${
-                  activeTab === "signup"
-                    ? "bg-[#2563EB] text-white shadow-md"
-                    : "text-[#6B7280]"
-                }`}
-              >
-                Sign Up
-              </button>
-            </div>
-          </motion.div>
+          <div className="relative z-10 space-y-3 text-sm">
+            <p className="inline-flex items-center gap-2 text-white/90">
+              <ShieldCheck className="h-4 w-4" /> Verified with your `@mavs.uta.edu` email
+            </p>
+            <p className="inline-flex items-center gap-2 text-white/90">
+              <Sparkles className="h-4 w-4" /> Clean listings and safer campus meetups
+            </p>
+          </div>
+        </div>
 
-          {/* Error Banner */}
+        <div className="w-full p-6 sm:p-10">
+          <div className="mb-6 lg:hidden">
+            <h1 className="text-2xl font-bold text-[#0F172A]">MaverickMarket</h1>
+            <p className="mt-1 text-sm text-[#64748B]">Sign in to access the UTA-only marketplace.</p>
+          </div>
+
+          <div className="mb-7 flex rounded-xl bg-[#F1F5F9] p-1.5">
+            <button
+              onClick={() => {
+                setActiveTab("login");
+                setAuthError("");
+              }}
+              className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
+                activeTab === "login" ? "bg-white text-[#0F172A] shadow-sm" : "text-[#64748B] hover:text-[#1E293B]"
+              }`}
+            >
+              Login
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab("signup");
+                setAuthError("");
+              }}
+              className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
+                activeTab === "signup" ? "bg-white text-[#0F172A] shadow-sm" : "text-[#64748B] hover:text-[#1E293B]"
+              }`}
+            >
+              Sign Up
+            </button>
+          </div>
+
           {authError && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
+              initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full mb-4 bg-[#FEE2E2] border border-[#EF4444] rounded-[12px] p-3 flex items-center gap-2"
+              className="mb-4 flex items-center gap-2 rounded-xl border border-[#FCA5A5] bg-[#FEF2F2] p-3"
             >
-              <AlertCircle className="w-5 h-5 text-[#EF4444] flex-shrink-0" />
-              <p className="text-[13px] text-[#991B1B]">{authError}</p>
+              <AlertCircle className="h-4 w-4 text-[#DC2626]" />
+              <p className="text-sm text-[#991B1B]">{authError}</p>
             </motion.div>
           )}
 
-          {/* Form */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="w-full space-y-4"
-          >
-            {/* Full Name Field - Sign Up Only */}
+          <div className="space-y-4">
             {activeTab === "signup" && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <label className="block text-[13px] font-medium text-[#6B7280] mb-2">
-                  Full Name
-                </label>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[#334155]">Full name</label>
                 <div className="relative">
+                  <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
                   <input
-                    type="text"
                     value={fullName}
-                    onChange={(e) => {
-                      setFullName(e.target.value);
-                      setAuthError("");
-                    }}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full rounded-xl border border-[#CBD5E1] bg-white py-3 pl-10 pr-4 text-sm text-[#0F172A] outline-none transition focus:border-[#2563EB] focus:ring-2 focus:ring-[#BFDBFE]"
                     placeholder="John Maverick"
-                    className="w-full px-4 py-3 pl-10 bg-white rounded-[12px] border-2 border-[#E5E7EB] text-[16px] text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:border-[#2563EB] transition-all"
                   />
-                  <User className="w-5 h-5 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
                 </div>
-              </motion.div>
+              </div>
             )}
 
-            {/* Profile Picture Upload - Sign Up Only */}
             {activeTab === "signup" && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3, delay: 0.1 }}
-              >
-                <label className="block text-[13px] font-medium text-[#6B7280] mb-2">
-                  Profile Picture
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[#334155]">Profile picture</label>
+                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[#60A5FA] bg-[#F8FAFC] p-3 text-sm font-medium text-[#1D4ED8] transition hover:bg-[#EFF6FF]">
+                  <Upload className="h-4 w-4" />
+                  {profilePicture ? "Change photo" : "Upload photo"}
+                  <input type="file" accept="image/*" onChange={handleProfilePictureUpload} className="hidden" />
                 </label>
-                <div className="flex items-center gap-4">
-                  {/* Image Preview */}
-                  <div className="w-16 h-16 rounded-full bg-[#E5E7EB] flex items-center justify-center overflow-hidden flex-shrink-0 border-2 border-[#E5E7EB]">
-                    {profilePicture ? (
-                      <img
-                        src={profilePicture}
-                        alt="Profile preview"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <User className="w-8 h-8 text-[#9CA3AF]" />
-                    )}
+                {profilePicture && (
+                  <div className="mt-3 inline-flex items-center gap-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-2 pr-4">
+                    <img src={profilePicture} alt="Profile preview" className="h-14 w-14 rounded-lg object-cover" />
+                    <p className="text-xs text-[#475569]">Profile image ready</p>
                   </div>
-
-                  {/* Upload Button */}
-                  <label className="flex-1 cursor-pointer">
-                    <div className="flex items-center justify-center gap-2 px-4 py-3 bg-white rounded-[12px] border-2 border-dashed border-[#2563EB] hover:border-[#1E40AF] hover:bg-[#EFF6FF] transition-all">
-                      <Upload className="w-5 h-5 text-[#2563EB]" />
-                      <span className="text-[14px] font-medium text-[#2563EB]">
-                        {profilePicture ? "Change Photo" : "Upload Photo"}
-                      </span>
-                    </div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleProfilePictureUpload}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-                <p className="text-[11px] text-[#9CA3AF] mt-2 ml-1">
-                  JPG, PNG or GIF. Max size 5MB.
-                </p>
-              </motion.div>
-            )}
-
-            {/* Email Field */}
-            <div>
-              <label className="block text-[13px] font-medium text-[#6B7280] mb-2">
-                UTA Email
-              </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={handleEmailChange}
-                  placeholder="yourname@mavs.uta.edu"
-                  className={`w-full px-4 py-3 bg-white rounded-[12px] border-2 text-[16px] text-[#111827] placeholder:text-[#9CA3AF] transition-all ${
-                    emailError
-                      ? "border-[#EF4444] animate-shake"
-                      : emailIsValid
-                      ? "border-[#10B981]"
-                      : "border-[#E5E7EB]"
-                  } focus:outline-none focus:border-[#2563EB]`}
-                />
-                {emailIsValid && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                  >
-                    <Check className="w-5 h-5 text-[#10B981]" />
-                  </motion.div>
                 )}
               </div>
-              {emailError && (
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-[13px] text-[#EF4444] mt-1 ml-1"
-                >
-                  {emailError}
-                </motion.p>
-              )}
+            )}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-[#334155]">UTA Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  validateEmail(e.target.value);
+                  setAuthError("");
+                }}
+                placeholder="yourname@mavs.uta.edu"
+                className={`w-full rounded-xl border bg-white px-4 py-3 text-sm text-[#0F172A] outline-none transition focus:ring-2 ${
+                  emailError
+                    ? "border-[#EF4444] focus:border-[#EF4444] focus:ring-[#FECACA]"
+                    : "border-[#CBD5E1] focus:border-[#2563EB] focus:ring-[#BFDBFE]"
+                }`}
+              />
+              {emailError && <p className="mt-1 text-xs text-[#DC2626]">{emailError}</p>}
             </div>
 
-            {/* Password Field */}
             <div>
-              <label className="block text-[13px] font-medium text-[#6B7280] mb-2">
-                Password
-              </label>
+              <label className="mb-2 block text-sm font-medium text-[#334155]">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -323,90 +241,30 @@ export default function AuthScreen() {
                     setPassword(e.target.value);
                     setAuthError("");
                   }}
-                  onKeyPress={(e) => e.key === "Enter" && handleSignIn()}
-                  placeholder="••••••••"
-                  className="w-full px-4 py-3 bg-white rounded-[12px] border-2 border-[#E5E7EB] text-[16px] text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:border-[#2563EB] transition-all"
+                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                  className="w-full rounded-xl border border-[#CBD5E1] bg-white py-3 pl-4 pr-10 text-sm text-[#0F172A] outline-none transition focus:border-[#2563EB] focus:ring-2 focus:ring-[#BFDBFE]"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#111827] transition-colors"
+                  onClick={() => setShowPassword((value) => !value)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] transition hover:text-[#334155]"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
-                  ) : (
-                    <Eye className="w-5 h-5" />
-                  )}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
 
-            {/* Sign In/Sign Up Button */}
-            <motion.button
-              onClick={handleSignIn}
+            <button
+              onClick={handleSubmit}
               disabled={!isFormValid || isLoading}
-              whileTap={{ scale: 0.98 }}
-              className={`w-full py-3.5 rounded-[12px] font-semibold text-[16px] transition-all shadow-md ${
-                isFormValid && !isLoading
-                  ? "bg-[#2563EB] text-white hover:bg-[#1E40AF] active:shadow-lg"
-                  : "bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed"
-              }`}
+              className="mt-2 w-full rounded-xl bg-[#1D4ED8] py-3 text-sm font-semibold text-white transition hover:bg-[#1E40AF] disabled:cursor-not-allowed disabled:bg-[#CBD5E1]"
             >
-              {isLoading ? (
-                <div className="flex items-center justify-center gap-2">
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>
-                    {activeTab === "signup" ? "Creating account..." : "Signing in..."}
-                  </span>
-                </div>
-              ) : activeTab === "signup" ? (
-                "Create Account"
-              ) : (
-                "Sign In"
-              )}
-            </motion.button>
-          </motion.div>
-
-          {/* Privacy Text */}
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="mt-6 text-[11px] text-[#9CA3AF] text-center px-4"
-          >
-            By {activeTab === "signup" ? "creating an account" : "signing in"}, you
-            agree to our Terms of Service and Privacy Policy. Valid UTA emails only.
-          </motion.p>
-
-          {/* Demo Instructions */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="mt-4 mb-8 bg-white/50 backdrop-blur-sm border border-[#E5E7EB] rounded-[12px] p-3 text-center"
-          >
-            <p className="text-[11px] text-[#6B7280] font-medium mb-1">
-              Demo Instructions
-            </p>
-            <p className="text-[10px] text-[#9CA3AF]">
-              {activeTab === "signup"
-                ? "Complete all fields to create an account"
-                : "Use any @mavs.uta.edu email + any password to continue"}
-            </p>
-          </motion.div>
+              {isLoading ? (activeTab === "signup" ? "Creating account..." : "Signing in...") : activeTab === "signup" ? "Create Account" : "Sign In"}
+            </button>
+          </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-5px); }
-          75% { transform: translateX(5px); }
-        }
-        .animate-shake {
-          animation: shake 0.3s ease-in-out;
-        }
-      `}</style>
     </div>
   );
 }
+
