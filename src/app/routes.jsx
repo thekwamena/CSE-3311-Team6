@@ -1,4 +1,4 @@
-import { Navigate, Outlet, createBrowserRouter } from "react-router-dom";
+import { Navigate, Outlet, createBrowserRouter } from "react-router";
 import AuthScreen from "./screens/AuthScreen";
 import BrowseScreen from "./screens/BrowseScreen";
 import ItemDetailsScreen from "./screens/ItemDetailsScreen";

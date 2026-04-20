@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { Eye, EyeOff, GraduationCap, AlertCircle, User, Upload, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabaseClient";
 
 export default function AuthScreen() {
   const navigate = useNavigate();
@@ -19,12 +20,14 @@ export default function AuthScreen() {
   const [authError, setAuthError] = useState("");
 
   const validateEmail = (value) => {
+    const normalizedEmail = value.trim().toLowerCase();
+
     if (!value) {
       setEmailError("");
       return false;
     }
 
-    if (!value.endsWith("@mavs.uta.edu")) {
+    if (!normalizedEmail.endsWith("@mavs.uta.edu")) {
       setEmailError("Must use UTA email (@mavs.uta.edu)");
       return false;
     }
@@ -65,7 +68,9 @@ export default function AuthScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!validateEmail(email) || !password) {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!validateEmail(normalizedEmail) || !password) {
       setAuthError("Please provide a valid email and password.");
       return;
     }
@@ -84,26 +89,65 @@ export default function AuthScreen() {
     setIsLoading(true);
     setAuthError("");
 
-    setTimeout(() => {
-      if (password === "wrong") {
-        setAuthError("Authentication failed. Please check your credentials.");
-        setIsLoading(false);
+    try {
+      if (activeTab === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password,
+          options: {
+            data: {
+              full_name: fullName.trim(),
+              profile_picture: profilePicture,
+            },
+          },
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        if (!data.session) {
+          toast.success("Account created. Check your UTA email to confirm your account.");
+          setIsLoading(false);
+          return;
+        }
+
+        login({
+          id: data.user.id,
+          email: data.user.email,
+          fullName: data.user.user_metadata?.full_name || fullName.trim(),
+          profilePicture: data.user.user_metadata?.profile_picture || profilePicture,
+        });
+        toast.success("Account created.");
+        navigate("/browse");
         return;
       }
 
-      const userProfile = {
-        email,
-        fullName: fullName.trim() || email.split("@")[0],
-        profilePicture,
-      };
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
 
-      login(userProfile);
-      toast.success(activeTab === "signup" ? "Account created." : "Welcome back.");
+      if (error) {
+        throw error;
+      }
+
+      login({
+        id: data.user.id,
+        email: data.user.email,
+        fullName: data.user.user_metadata?.full_name || data.user.email?.split("@")[0],
+        profilePicture: data.user.user_metadata?.profile_picture || null,
+      });
+      toast.success("Welcome back.");
       navigate("/browse");
-    }, 600);
+    } catch (error) {
+      setAuthError(error.message || "Authentication failed. Please check your credentials.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const emailIsValid = email.endsWith("@mavs.uta.edu") && !emailError;
+  const emailIsValid = email.trim().toLowerCase().endsWith("@mavs.uta.edu") && !emailError;
   const isFormValid =
     emailIsValid &&
     password &&
@@ -267,4 +311,5 @@ export default function AuthScreen() {
     </div>
   );
 }
+
 
