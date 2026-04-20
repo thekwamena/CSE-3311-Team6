@@ -36,21 +36,9 @@ export function ensureSeedData() {
   }
 }
 
-export async function getListings() {
-  const { data, error } = await supabase
-    .from("listings")
-    .select(`
-      *,
-      profiles:seller_id (
-        id,
-        full_name,
-        avatar_url
-      )
-    `)
-    .order("created_at", { ascending: false });
-
-  if (error) throw error;
-  return data;
+export function getListings() {
+  ensureSeedData();
+  return readJson(LISTINGS_KEY, mockListings);
 }
 
 export function getListingById(id) {
@@ -90,6 +78,10 @@ export function getConversations() {
 }
 
 export async function addReview({ sellerId, reviewerId, listingId, rating, comment }) {
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
   const { data, error } = await supabase
     .from("reviews")
     .insert({
@@ -107,6 +99,10 @@ export async function addReview({ sellerId, reviewerId, listingId, rating, comme
 }
 
 export async function getSellerRating(sellerId) {
+  if (!supabase) {
+    return { average_rating: 0, review_count: 0 };
+  }
+
   const { data, error } = await supabase
     .from("seller_ratings")
     .select("*")
