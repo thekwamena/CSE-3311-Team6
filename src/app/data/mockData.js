@@ -10,6 +10,7 @@ export const mockListings = [
       "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=800&q=80",
     ],
     seller: {
+      id: "alex-thompson",
       name: "Alex Thompson",
       rating: 4.9,
       avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80",
@@ -28,6 +29,7 @@ export const mockListings = [
       "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=800&q=80",
     ],
     seller: {
+      id: "sarah-kim",
       name: "Sarah Kim",
       rating: 5.0,
       avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80",
@@ -46,6 +48,7 @@ export const mockListings = [
       "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&q=80",
     ],
     seller: {
+      id: "marcus-chen",
       name: "Marcus Chen",
       rating: 4.8,
       avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80",
@@ -64,6 +67,7 @@ export const mockListings = [
       "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=800&q=80",
     ],
     seller: {
+      id: "emily-rodriguez",
       name: "Emily Rodriguez",
       rating: 4.7,
       avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&q=80",
@@ -82,6 +86,7 @@ export const mockListings = [
       "https://images.unsplash.com/photo-1603126857599-f6e157fa2fe6?w=800&q=80",
     ],
     seller: {
+      id: "david-park",
       name: "David Park",
       rating: 4.9,
       avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&q=80",
@@ -100,6 +105,7 @@ export const mockListings = [
       "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=800&q=80",
     ],
     seller: {
+      id: "jessica-lee",
       name: "Jessica Lee",
       rating: 5.0,
       avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
@@ -107,6 +113,49 @@ export const mockListings = [
     },
     distance: 0.6,
     location: "Library",
+  },
+];
+
+export const mockReviews = [
+  {
+    id: "1",
+    sellerId: "alex-thompson",
+    reviewerName: "Maya R.",
+    rating: 5,
+    comment: "Fast replies and the textbook was exactly as listed.",
+    createdAt: "2026-02-12",
+  },
+  {
+    id: "2",
+    sellerId: "alex-thompson",
+    reviewerName: "Jordan P.",
+    rating: 5,
+    comment: "Met at the library and everything went smoothly.",
+    createdAt: "2026-02-02",
+  },
+  {
+    id: "3",
+    sellerId: "sarah-kim",
+    reviewerName: "Chris W.",
+    rating: 5,
+    comment: "Great seller. Book was clean and fairly priced.",
+    createdAt: "2026-01-18",
+  },
+  {
+    id: "4",
+    sellerId: "marcus-chen",
+    reviewerName: "Nina T.",
+    rating: 5,
+    comment: "Answered all my questions before meeting up.",
+    createdAt: "2026-03-04",
+  },
+  {
+    id: "5",
+    sellerId: "emily-rodriguez",
+    reviewerName: "Andre B.",
+    rating: 4,
+    comment: "Desk was in good shape and pickup was easy.",
+    createdAt: "2026-02-25",
   },
 ];
 

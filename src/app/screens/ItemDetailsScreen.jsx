@@ -48,13 +48,16 @@ export default function ItemDetailsScreen() {
 
             <div className="mt-5 rounded-xl border border-[#E5E7EB] p-4">
               <h2 className="mb-3 text-sm font-semibold text-[#111827]">Seller</h2>
-              <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate(`/users/${listing.seller.id}`)}
+                className="flex w-full items-center gap-3 rounded-lg text-left transition hover:bg-[#F9FAFB]"
+              >
                 <img src={listing.seller.avatar} alt={listing.seller.name} className="h-11 w-11 rounded-full object-cover" />
                 <div>
                   <p className="text-sm font-semibold text-[#111827]">{listing.seller.name}</p>
                   <p className="inline-flex items-center gap-1 text-xs text-[#6B7280]"><Star className="h-3.5 w-3.5 text-[#F59E0B]" /> {listing.seller.rating.toFixed(1)} rating</p>
                 </div>
-              </div>
+              </button>
               <p className="mt-3 inline-flex items-center gap-1 text-xs text-[#6B7280]"><MapPin className="h-3.5 w-3.5" /> {listing.distance} mi away - {listing.location}</p>
             </div>
 

@@ -1,23 +1,26 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
-import { addListing } from "../data/marketplaceStore";
+import { addListing, getListingById, updateListing } from "../data/marketplaceStore";
 import { useAuth } from "../context/AuthContext";
 
 const categories = ["Books", "Furniture", "Electronics", "Other"];
 
 export default function CreateListingScreen() {
   const navigate = useNavigate();
+  const { id } = useParams();
   const { user } = useAuth();
+  const existingListing = id ? getListingById(id) : null;
+  const isEditing = Boolean(id);
   const [form, setForm] = useState({
-    title: "",
-    description: "",
-    price: "",
-    category: "Books",
-    location: "UTA Campus",
-    distance: "0.5",
-    images: [],
+    title: existingListing?.title || "",
+    description: existingListing?.description || "",
+    price: existingListing?.price ? String(existingListing.price) : "",
+    category: existingListing?.category || "Books",
+    location: existingListing?.location || "UTA Campus",
+    distance: existingListing?.distance ? String(existingListing.distance) : "0.5",
+    images: existingListing?.images || [],
   });
 
   const [error, setError] = useState("");
@@ -49,10 +52,46 @@ export default function CreateListingScreen() {
       return;
     }
 
-    const created = addListing(form, user);
-    toast.success("Listing created successfully.");
-    navigate(`/item/${created.id}`);
+    if (Number(form.price) > 1000) {
+      setError("Listing price cannot be over $1000.");
+      return;
+    }
+
+    try {
+      if (isEditing) {
+        const updated = updateListing(id, form, user);
+        toast.success("Listing updated successfully.");
+        navigate(`/item/${updated.id}`);
+        return;
+      }
+
+      const created = addListing(form, user);
+      toast.success("Listing created successfully.");
+      navigate(`/item/${created.id}`);
+    } catch (error) {
+      setError(error.message || "Could not save listing.");
+    }
   };
+
+  if (isEditing && !existingListing) {
+    return (
+      <div className="min-h-screen bg-[#F4F6F9] px-4 py-8">
+        <div className="mx-auto max-w-2xl rounded-2xl bg-white p-6 text-center shadow-sm">
+          Listing not found.
+        </div>
+      </div>
+    );
+  }
+
+  if (isEditing && existingListing?.seller.id !== user?.id) {
+    return (
+      <div className="min-h-screen bg-[#F4F6F9] px-4 py-8">
+        <div className="mx-auto max-w-2xl rounded-2xl bg-white p-6 text-center shadow-sm">
+          You can only edit your own listings.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F4F6F9] px-4 py-8">
@@ -66,8 +105,12 @@ export default function CreateListingScreen() {
           Back
         </button>
 
-        <h1 className="mb-1 text-2xl font-bold text-[#111827]">Create a listing</h1>
-        <p className="mb-6 text-sm text-[#6B7280]">Share your item with the UTA community.</p>
+        <h1 className="mb-1 text-2xl font-bold text-[#111827]">
+          {isEditing ? "Edit listing" : "Create a listing"}
+        </h1>
+        <p className="mb-6 text-sm text-[#6B7280]">
+          {isEditing ? "Update your post details." : "Share your item with the UTA community."}
+        </p>
 
         {error && <p className="mb-4 rounded-lg bg-[#FEE2E2] p-3 text-sm text-[#991B1B]">{error}</p>}
 
@@ -99,6 +142,7 @@ export default function CreateListingScreen() {
               <input
                 type="number"
                 min="1"
+                max="1000"
                 value={form.price}
                 onChange={(e) => setForm((current) => ({ ...current, price: e.target.value }))}
                 className="w-full rounded-xl border border-[#D1D5DB] px-4 py-3 text-sm focus:border-[#2563EB] focus:outline-none"
@@ -134,7 +178,7 @@ export default function CreateListingScreen() {
             <label className="mb-2 block text-sm font-medium text-[#374151]">Item image *</label>
             <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[#2563EB] p-4 text-sm font-medium text-[#2563EB] hover:bg-[#EFF6FF]">
               <ImagePlus className="h-4 w-4" />
-              Upload image
+              {form.images[0] ? "Change image" : "Upload image"}
               <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
             </label>
             {form.images[0] && (
@@ -146,7 +190,7 @@ export default function CreateListingScreen() {
             type="submit"
             className="w-full rounded-xl bg-[#2563EB] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1E40AF]"
           >
-            Publish listing
+            {isEditing ? "Save changes" : "Publish listing"}
           </button>
         </form>
       </div>

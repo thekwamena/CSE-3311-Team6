@@ -1,24 +1,55 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { MessageCircle, Search } from "lucide-react";
-import { getConversations, getListingById } from "../data/marketplaceStore";
+import { toast } from "sonner";
+import { getConversationsForUser, getListingById } from "../data/marketplaceStore";
+import { useAuth } from "../context/AuthContext";
 
 export default function MessagesScreen() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
+  const [conversations, setConversations] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const conversations = useMemo(() => {
-    return getConversations()
-      .map((conversation) => {
-        const listing = getListingById(conversation.listingId);
-        return {
-          ...conversation,
-          listing,
-          lastMessage: conversation.messages[conversation.messages.length - 1]?.text || "No messages yet",
-        };
+  useEffect(() => {
+    let isMounted = true;
+
+    setIsLoading(true);
+    getConversationsForUser(user)
+      .then((nextConversations) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setConversations(
+          nextConversations
+            .map((conversation) => {
+              const listing = conversation.listing || getListingById(conversation.listingId);
+              return {
+                ...conversation,
+                listing,
+                lastMessage: conversation.messages[conversation.messages.length - 1]?.text || "No messages yet",
+              };
+            })
+            .filter((conversation) => Boolean(conversation.listing))
+        );
       })
-      .filter((conversation) => Boolean(conversation.listing));
-  }, []);
+      .catch(() => {
+        if (isMounted) {
+          toast.error("Could not load messages.");
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   const filtered = conversations.filter((item) => {
     const target = `${item.participantName} ${item.listing?.title} ${item.lastMessage}`.toLowerCase();
@@ -42,7 +73,11 @@ export default function MessagesScreen() {
         </div>
 
         <div className="divide-y divide-[#E5E7EB]">
-          {filtered.length > 0 ? (
+          {isLoading ? (
+            <div className="p-10 text-center">
+              <p className="text-sm text-[#6B7280]">Loading conversations...</p>
+            </div>
+          ) : filtered.length > 0 ? (
             filtered.map((conversation) => (
               <button
                 key={conversation.id}

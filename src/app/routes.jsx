@@ -9,6 +9,8 @@ import SettingsScreen from "./screens/SettingsScreen";
 import SearchScreen from "./screens/SearchScreen";
 import MessagesScreen from "./screens/MessagesScreen";
 import CreateListingScreen from "./screens/CreateListingScreen";
+import SellerProfileScreen from "./screens/SellerProfileScreen";
+import MyListingsScreen from "./screens/MyListingsScreen";
 import { useAuth } from "./context/AuthContext";
 
 function ProtectedRoute() {
@@ -55,6 +57,10 @@ export const router = createBrowserRouter([
         Component: ProfileScreen,
       },
       {
+        path: "/users/:sellerId",
+        Component: SellerProfileScreen,
+      },
+      {
         path: "/settings",
         Component: SettingsScreen,
       },
@@ -69,6 +75,14 @@ export const router = createBrowserRouter([
       {
         path: "/create-listing",
         Component: CreateListingScreen,
+      },
+      {
+        path: "/edit-listing/:id",
+        Component: CreateListingScreen,
+      },
+      {
+        path: "/my-listings",
+        Component: MyListingsScreen,
       },
     ],
   },
