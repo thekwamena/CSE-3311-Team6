@@ -1,4 +1,5 @@
 import { mockListings, mockMessages } from "./mockData";
+import { supabase } from "../lib/supabaseClient";
 
 const LISTINGS_KEY = "marketplace:listings";
 const CONVERSATIONS_KEY = "marketplace:conversations";
@@ -35,9 +36,21 @@ export function ensureSeedData() {
   }
 }
 
-export function getListings() {
-  ensureSeedData();
-  return readJson(LISTINGS_KEY, mockListings);
+export async function getListings() {
+  const { data, error } = await supabase
+    .from("listings")
+    .select(`
+      *,
+      profiles:seller_id (
+        id,
+        full_name,
+        avatar_url
+      )
+    `)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data;
 }
 
 export function getListingById(id) {
@@ -75,6 +88,35 @@ export function getConversations() {
   ensureSeedData();
   return readJson(CONVERSATIONS_KEY, getInitialConversations());
 }
+
+export async function addReview({ sellerId, reviewerId, listingId, rating, comment }) {
+  const { data, error } = await supabase
+    .from("reviews")
+    .insert({
+      seller_id: sellerId,
+      reviewer_id: reviewerId,
+      listing_id: listingId,
+      rating,
+      comment,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getSellerRating(sellerId) {
+  const { data, error } = await supabase
+    .from("seller_ratings")
+    .select("*")
+    .eq("seller_id", sellerId)
+    .single();
+
+  if (error) return { average_rating: 0, review_count: 0 };
+  return data;
+}
+
 
 export function getConversationByListingId(listingId) {
   return getConversations().find((conversation) => conversation.listingId === listingId);
@@ -125,6 +167,8 @@ export function sendMessage(listingId, sender, text) {
       ],
     });
   }
+
+  
 
   writeJson(CONVERSATIONS_KEY, nextConversations);
   return nextConversations.find((conversation) => conversation.listingId === listingId);
