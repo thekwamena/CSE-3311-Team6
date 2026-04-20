@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import { Eye, EyeOff, GraduationCap, AlertCircle, User, Upload, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
-import { supabase } from "../lib/supabaseClient";
+import { isSupabaseConfigured, supabase } from "../lib/supabaseClient";
 
 export default function AuthScreen() {
   const navigate = useNavigate();
@@ -68,6 +68,11 @@ export default function AuthScreen() {
   };
 
   const handleSubmit = async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      setAuthError("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local, then restart npm run dev.");
+      return;
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!validateEmail(normalizedEmail) || !password) {

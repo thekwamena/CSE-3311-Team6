@@ -17,6 +17,10 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(getStoredUser);
 
   useEffect(() => {
+    if (!supabase) {
+      return undefined;
+    }
+
     let isMounted = true;
 
     const buildUserProfile = (authUser) => {
@@ -72,7 +76,9 @@ export function AuthProvider({ children }) {
         setUser(payload);
       },
       async logout() {
-        await supabase.auth.signOut();
+        if (supabase) {
+          await supabase.auth.signOut();
+        }
         localStorage.removeItem(USER_KEY);
         setUser(null);
       },
@@ -91,4 +97,3 @@ export function useAuth() {
 
   return context;
 }
-
