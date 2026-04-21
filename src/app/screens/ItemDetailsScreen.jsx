@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, MessageCircle, ShoppingCart, MapPin, Shield, Star } from "lucide-react";
 import { toast } from "sonner";
@@ -8,7 +8,36 @@ export default function ItemDetailsScreen() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [requestSent, setRequestSent] = useState(false);
-  const listing = getListingById(id);
+  const [listing, setListing] = useState(null);
+  const [isLoadingListing, setIsLoadingListing] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getListingById(id)
+      .then((nextListing) => {
+        if (isMounted) {
+          setListing(nextListing || null);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingListing(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  if (isLoadingListing) {
+    return (
+      <div className="min-h-screen bg-[#F4F6F9] p-6">
+        <div className="mx-auto max-w-5xl rounded-2xl bg-white p-8 text-center shadow-sm">Loading listing...</div>
+      </div>
+    );
+  }
 
   if (!listing) {
     return (

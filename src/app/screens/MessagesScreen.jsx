@@ -17,21 +17,24 @@ export default function MessagesScreen() {
 
     setIsLoading(true);
     getConversationsForUser(user)
-      .then((nextConversations) => {
+      .then(async (nextConversations) => {
+        const hydratedConversations = await Promise.all(
+          nextConversations.map(async (conversation) => {
+            const listing = conversation.listing || (await getListingById(conversation.listingId));
+            return {
+              ...conversation,
+              listing,
+              lastMessage: conversation.messages[conversation.messages.length - 1]?.text || "No messages yet",
+            };
+          })
+        );
+
         if (!isMounted) {
           return;
         }
 
         setConversations(
-          nextConversations
-            .map((conversation) => {
-              const listing = conversation.listing || getListingById(conversation.listingId);
-              return {
-                ...conversation,
-                listing,
-                lastMessage: conversation.messages[conversation.messages.length - 1]?.text || "No messages yet",
-              };
-            })
+          hydratedConversations
             .filter((conversation) => Boolean(conversation.listing))
         );
       })

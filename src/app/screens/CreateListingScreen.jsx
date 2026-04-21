@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
@@ -11,19 +11,61 @@ export default function CreateListingScreen() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { user } = useAuth();
-  const existingListing = id ? getListingById(id) : null;
   const isEditing = Boolean(id);
+  const [existingListing, setExistingListing] = useState(null);
+  const [isLoadingListing, setIsLoadingListing] = useState(isEditing);
   const [form, setForm] = useState({
-    title: existingListing?.title || "",
-    description: existingListing?.description || "",
-    price: existingListing?.price ? String(existingListing.price) : "",
-    category: existingListing?.category || "Books",
-    location: existingListing?.location || "UTA Campus",
-    distance: existingListing?.distance ? String(existingListing.distance) : "0.5",
-    images: existingListing?.images || [],
+    title: "",
+    description: "",
+    price: "",
+    category: "Books",
+    location: "UTA Campus",
+    distance: "0.5",
+    images: [],
+    imageUrl: "",
+    imageFile: null,
   });
 
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!isEditing) {
+      return undefined;
+    }
+
+    getListingById(id)
+      .then((nextListing) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setExistingListing(nextListing || null);
+        if (nextListing) {
+          setForm({
+            title: nextListing.title || "",
+            description: nextListing.description || "",
+            price: nextListing.price ? String(nextListing.price) : "",
+            category: nextListing.category || "Books",
+            location: nextListing.location || "UTA Campus",
+            distance: nextListing.distance ? String(nextListing.distance) : "0.5",
+            images: nextListing.images || [],
+            imageUrl: nextListing.images?.[0] || "",
+            imageFile: null,
+          });
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingListing(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id, isEditing]);
 
   const handleImageUpload = (event) => {
     const file = event.target.files?.[0];
@@ -36,18 +78,25 @@ export default function CreateListingScreen() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setForm((current) => ({ ...current, images: [String(reader.result)] }));
-      setError("");
-    };
-    reader.readAsDataURL(file);
+    const previewUrl = URL.createObjectURL(file);
+    setForm((current) => ({
+      ...current,
+      images: [previewUrl],
+      imageUrl: "",
+      imageFile: file,
+    }));
+    setError("");
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!form.title.trim() || !form.description.trim() || !form.price || form.images.length === 0) {
+    if (
+      !form.title.trim() ||
+      !form.description.trim() ||
+      !form.price ||
+      (!form.imageFile && !form.imageUrl && form.images.length === 0)
+    ) {
       setError("Please fill all required fields and upload at least one image.");
       return;
     }
@@ -59,19 +108,29 @@ export default function CreateListingScreen() {
 
     try {
       if (isEditing) {
-        const updated = updateListing(id, form, user);
+        const updated = await updateListing(id, form, user);
         toast.success("Listing updated successfully.");
         navigate(`/item/${updated.id}`);
         return;
       }
 
-      const created = addListing(form, user);
+      const created = await addListing(form, user);
       toast.success("Listing created successfully.");
       navigate(`/item/${created.id}`);
     } catch (error) {
       setError(error.message || "Could not save listing.");
     }
   };
+
+  if (isLoadingListing) {
+    return (
+      <div className="min-h-screen bg-[#F4F6F9] px-4 py-8">
+        <div className="mx-auto max-w-2xl rounded-2xl bg-white p-6 text-center shadow-sm">
+          Loading listing...
+        </div>
+      </div>
+    );
+  }
 
   if (isEditing && !existingListing) {
     return (

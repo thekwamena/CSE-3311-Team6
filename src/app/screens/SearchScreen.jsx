@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search, X } from "lucide-react";
 import { getListings } from "../data/marketplaceStore";
@@ -6,15 +6,36 @@ import { getListings } from "../data/marketplaceStore";
 export default function SearchScreen() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
-  const listings = useMemo(() => getListings(), []);
+  const [listings, setListings] = useState([]);
+  const [isLoadingListings, setIsLoadingListings] = useState(true);
 
-  const filteredListings = searchQuery
+  useEffect(() => {
+    let isMounted = true;
+
+    getListings()
+      .then((nextListings) => {
+        if (isMounted) {
+          setListings(nextListings);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingListings(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filteredListings = useMemo(() => searchQuery
     ? listings.filter(
         (listing) =>
           listing.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
           listing.description.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : [];
+    : [], [listings, searchQuery]);
 
   return (
     <div className="min-h-screen bg-[#F4F6F9] p-4 sm:p-6">
@@ -41,7 +62,9 @@ export default function SearchScreen() {
         )}
 
         <div className="space-y-3">
-          {filteredListings.map((listing) => (
+          {isLoadingListings && searchQuery ? (
+            <p className="py-10 text-center text-sm text-[#6B7280]">Loading listings...</p>
+          ) : filteredListings.map((listing) => (
             <button
               key={listing.id}
               onClick={() => navigate(`/item/${listing.id}`)}

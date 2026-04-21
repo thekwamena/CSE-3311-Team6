@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { getProfileById, mapProfileToUser } from "../data/profileStore";
 
 const AuthContext = createContext(null);
 const USER_KEY = "userProfile";
@@ -23,42 +24,75 @@ export function AuthProvider({ children }) {
 
     let isMounted = true;
 
-    const buildUserProfile = (authUser) => {
+    const buildUserProfile = async (authUser) => {
       if (!authUser) {
         return null;
       }
 
-      return {
-        id: authUser.id,
-        email: authUser.email,
-        fullName: authUser.user_metadata?.full_name || authUser.email?.split("@")[0],
-        profilePicture: authUser.user_metadata?.profile_picture || null,
-      };
+      const storedUser = getStoredUser();
+      const profileRow = await getProfileById(authUser.id);
+
+      return mapProfileToUser(authUser, profileRow, storedUser?.profilePicture);
     };
 
-    supabase.auth.getSession().then(({ data }) => {
+    const applyAuthSession = async (session) => {
+      const authUser = session?.user;
+      if (!authUser) {
+        localStorage.removeItem(USER_KEY);
+        setUser(null);
+        return;
+      }
+
+      const storedUser = getStoredUser();
+      const fallbackProfile = mapProfileToUser(authUser, null, storedUser?.profilePicture);
+      localStorage.setItem(USER_KEY, JSON.stringify(fallbackProfile));
+      setUser(fallbackProfile);
+
+      const profile = await buildUserProfile(authUser);
+      if (profile) {
+        localStorage.setItem(USER_KEY, JSON.stringify(profile));
+        setUser(profile);
+      }
+    };
+
+    supabase.auth.getSession().then(async ({ data }) => {
       if (!isMounted) {
         return;
       }
 
-      const profile = buildUserProfile(data.session?.user);
-      if (profile) {
-        localStorage.setItem(USER_KEY, JSON.stringify(profile));
-        setUser(profile);
+      try {
+        await applyAuthSession(data.session);
+      } catch {
+        const authUser = data.session?.user;
+        if (!authUser) {
+          localStorage.removeItem(USER_KEY);
+          setUser(null);
+          return;
+        }
+
+        const storedUser = getStoredUser();
+        const fallbackProfile = mapProfileToUser(authUser, null, storedUser?.profilePicture);
+        localStorage.setItem(USER_KEY, JSON.stringify(fallbackProfile));
+        setUser(fallbackProfile);
       }
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      const profile = buildUserProfile(session?.user);
-      if (profile) {
-        localStorage.setItem(USER_KEY, JSON.stringify(profile));
-        setUser(profile);
-      } else {
-        localStorage.removeItem(USER_KEY);
-        setUser(null);
-      }
+      void applyAuthSession(session).catch(() => {
+        const authUser = session?.user;
+        if (!authUser) {
+          localStorage.removeItem(USER_KEY);
+          setUser(null);
+          return;
+        }
+
+        const storedUser = getStoredUser();
+        const fallbackProfile = mapProfileToUser(authUser, null, storedUser?.profilePicture);
+        localStorage.setItem(USER_KEY, JSON.stringify(fallbackProfile));
+        setUser(fallbackProfile);
+      });
     });
 
     return () => {
@@ -75,12 +109,21 @@ export function AuthProvider({ children }) {
         localStorage.setItem(USER_KEY, JSON.stringify(payload));
         setUser(payload);
       },
+      updateUserProfile(nextUser) {
+        localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+        setUser(nextUser);
+      },
       async logout() {
-        if (supabase) {
-          await supabase.auth.signOut();
-        }
         localStorage.removeItem(USER_KEY);
         setUser(null);
+
+        if (supabase) {
+          try {
+            await supabase.auth.signOut();
+          } catch {
+            // Local session state is already cleared above.
+          }
+        }
       },
     }),
     [user]

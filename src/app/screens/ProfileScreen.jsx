@@ -1,16 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { Mail, ShieldCheck, Settings, ArrowLeft, List, Star } from "lucide-react";
+import { Mail, ShieldCheck, Settings, ArrowLeft, List, Star, Camera } from "lucide-react";
+import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
+import { upsertProfile, uploadProfileImage } from "../data/profileStore";
 import { getSellerReviews } from "../data/marketplaceStore";
 
 export default function ProfileScreen() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const fileInputRef = useRef(null);
+  const { user, updateUserProfile } = useAuth();
   const [ratingSummary, setRatingSummary] = useState({
     averageRating: 0,
     reviewCount: 0,
   });
+  const [isUploadingProfilePicture, setIsUploadingProfilePicture] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,6 +41,50 @@ export default function ProfileScreen() {
     };
   }, [user?.id]);
 
+  const handleProfilePictureUpload = async (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file || !user?.id) {
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image size must be less than 5MB.");
+      event.target.value = "";
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose a valid image file.");
+      event.target.value = "";
+      return;
+    }
+
+    setIsUploadingProfilePicture(true);
+
+    try {
+      const avatarUrl = await uploadProfileImage(file, user.id);
+      const profileRow = await upsertProfile({
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        avatarUrl,
+      });
+
+      updateUserProfile({
+        ...user,
+        fullName: profileRow.full_name || user.fullName,
+        profilePicture: profileRow.avatar_url || avatarUrl,
+      });
+      toast.success("Profile photo updated.");
+    } catch (error) {
+      toast.error(error.message || "Could not update your profile photo.");
+    } finally {
+      setIsUploadingProfilePicture(false);
+      event.target.value = "";
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F4F6F9] p-4 sm:p-6">
       <div className="mx-auto max-w-3xl rounded-2xl bg-white p-6 shadow-sm">
@@ -49,14 +97,31 @@ export default function ProfileScreen() {
         </button>
 
         <div className="mb-6 flex items-center gap-4">
-          <img
-            src={
-              user?.profilePicture ||
-              "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&q=80"
-            }
-            alt="Profile"
-            className="h-20 w-20 rounded-full border border-[#E5E7EB] object-cover"
-          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="group relative"
+            disabled={isUploadingProfilePicture}
+          >
+            <img
+              src={
+                user?.profilePicture ||
+                "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&q=80"
+              }
+              alt="Profile"
+              className="h-20 w-20 rounded-full border border-[#E5E7EB] object-cover"
+            />
+            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition group-hover:opacity-100">
+              <Camera className="h-4 w-4" />
+            </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleProfilePictureUpload}
+              className="hidden"
+            />
+          </button>
           <div>
             <h1 className="text-2xl font-bold text-[#111827]">
               {user?.fullName || "UTA Student"}
@@ -72,6 +137,9 @@ export default function ProfileScreen() {
               {ratingSummary.reviewCount > 0
                 ? `${ratingSummary.averageRating.toFixed(1)} rating (${ratingSummary.reviewCount} reviews)`
                 : "No ratings yet"}
+            </p>
+            <p className="mt-1 text-xs text-[#6B7280]">
+              {isUploadingProfilePicture ? "Uploading photo..." : "Click your photo to change it"}
             </p>
           </div>
         </div>

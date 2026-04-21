@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Edit, Eye, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -8,21 +8,45 @@ import { useAuth } from "../context/AuthContext";
 export default function MyListingsScreen() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [refreshKey, setRefreshKey] = useState(0);
-  const listings = useMemo(
-    () => (user?.id ? getListingsByUserId(user.id) : []),
-    [user?.id, refreshKey]
-  );
+  const [listings, setListings] = useState([]);
+  const [isLoadingListings, setIsLoadingListings] = useState(true);
 
-  const handleDelete = (listing) => {
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!user?.id) {
+      setListings([]);
+      setIsLoadingListings(false);
+      return undefined;
+    }
+
+    setIsLoadingListings(true);
+    getListingsByUserId(user.id)
+      .then((nextListings) => {
+        if (isMounted) {
+          setListings(nextListings);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingListings(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
+
+  const handleDelete = async (listing) => {
     const confirmed = window.confirm(`Delete "${listing.title}"? This cannot be undone.`);
     if (!confirmed) {
       return;
     }
 
     try {
-      deleteListing(listing.id, user);
-      setRefreshKey((value) => value + 1);
+      await deleteListing(listing.id, user);
+      setListings((currentListings) => currentListings.filter((item) => item.id !== listing.id));
       toast.success("Listing deleted.");
     } catch (error) {
       toast.error(error.message || "Could not delete listing.");
@@ -54,7 +78,11 @@ export default function MyListingsScreen() {
           </button>
         </div>
 
-        {listings.length === 0 ? (
+        {isLoadingListings ? (
+          <div className="rounded-xl border border-dashed border-[#CBD5E1] bg-white p-10 text-center shadow-sm">
+            <p className="text-sm text-[#6B7280]">Loading your listings...</p>
+          </div>
+        ) : listings.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[#CBD5E1] bg-white p-10 text-center shadow-sm">
             <p className="text-sm font-semibold text-[#111827]">No listings yet</p>
             <p className="mt-1 text-sm text-[#6B7280]">Create a post and it will appear here.</p>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search, Plus, MapPin, Star, Shield, MessageCircle, User, LogOut, SlidersHorizontal } from "lucide-react";
 import { getListings } from "../data/marketplaceStore";
@@ -7,21 +7,42 @@ import { useAuth } from "../context/AuthContext";
 export default function BrowseScreen() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [listings, setListings] = useState([]);
+  const [isLoadingListings, setIsLoadingListings] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [maxPrice, setMaxPrice] = useState(1000);
 
-  const listings = useMemo(() => getListings(), []);
+  useEffect(() => {
+    let isMounted = true;
+
+    getListings()
+      .then((nextListings) => {
+        if (isMounted) {
+          setListings(nextListings);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingListings(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const categories = ["All", ...new Set(listings.map((item) => item.category))];
 
-  const filteredListings = listings.filter((listing) => {
+  const filteredListings = useMemo(() => listings.filter((listing) => {
     const matchesSearch =
       listing.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       listing.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = activeCategory === "All" || listing.category === activeCategory;
     const matchesPrice = Number(listing.price) <= maxPrice;
     return matchesSearch && matchesCategory && matchesPrice;
-  });
+  }), [activeCategory, listings, maxPrice, searchQuery]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2FF]">
@@ -115,7 +136,11 @@ export default function BrowseScreen() {
           </div>
         </div>
 
-        {filteredListings.length === 0 ? (
+        {isLoadingListings ? (
+          <div className="rounded-2xl border border-dashed border-[#CBD5E1] bg-white p-10 text-center text-[#64748B] shadow-sm">
+            Loading listings...
+          </div>
+        ) : filteredListings.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[#CBD5E1] bg-white p-10 text-center text-[#64748B] shadow-sm">
             No listings match these filters.
           </div>

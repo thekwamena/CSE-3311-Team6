@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, MapPin, ShieldCheck, Star } from "lucide-react";
 import { toast } from "sonner";
@@ -41,8 +41,33 @@ export default function SellerProfileScreen() {
   const [reviewError, setReviewError] = useState("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
-  const seller = useMemo(() => getSellerById(sellerId), [sellerId]);
-  const sellerListings = useMemo(() => getListingsBySellerId(sellerId), [sellerId]);
+  const [seller, setSeller] = useState(null);
+  const [sellerListings, setSellerListings] = useState([]);
+  const [isLoadingSeller, setIsLoadingSeller] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    setIsLoadingSeller(true);
+    Promise.all([getSellerById(sellerId), getListingsBySellerId(sellerId)])
+      .then(([nextSeller, nextListings]) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setSeller(nextSeller || null);
+        setSellerListings(nextListings);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingSeller(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [sellerId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -107,6 +132,16 @@ export default function SellerProfileScreen() {
       setIsSubmittingReview(false);
     }
   };
+
+  if (isLoadingSeller) {
+    return (
+      <div className="min-h-screen bg-[#F4F6F9] p-6">
+        <div className="mx-auto max-w-4xl rounded-xl bg-white p-8 text-center shadow-sm">
+          Loading seller profile...
+        </div>
+      </div>
+    );
+  }
 
   if (!seller) {
     return (

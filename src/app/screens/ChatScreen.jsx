@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, Send } from "lucide-react";
 import { toast } from "sonner";
@@ -10,13 +10,33 @@ export default function ChatScreen() {
   const { id } = useParams();
   const { user } = useAuth();
   const [inputText, setInputText] = useState("");
+  const [listing, setListing] = useState(null);
   const [conversation, setConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingListing, setIsLoadingListing] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef(null);
-
-  const listing = useMemo(() => getListingById(id), [id]);
   const messages = conversation?.messages || [];
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getListingById(id)
+      .then((nextListing) => {
+        if (isMounted) {
+          setListing(nextListing || null);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingListing(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
 
   useEffect(() => {
     let isMounted = true;
@@ -47,6 +67,14 @@ export default function ChatScreen() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  if (isLoadingListing) {
+    return (
+      <div className="min-h-screen bg-[#F4F6F9] p-6">
+        <div className="mx-auto max-w-3xl rounded-2xl bg-white p-8 text-center shadow-sm">Loading conversation...</div>
+      </div>
+    );
+  }
 
   if (!listing) {
     return (

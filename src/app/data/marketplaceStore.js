@@ -4,6 +4,9 @@ import { supabase } from "../lib/supabaseClient";
 const LISTINGS_KEY = "marketplace:listings"; 
 const CONVERSATIONS_KEY = "marketplace:conversations";
 const REVIEWS_KEY = "marketplace:reviews";
+const LISTING_IMAGES_BUCKET = "listing-images";
+const DEFAULT_AVATAR =
+  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&q=80";
   
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -28,6 +31,107 @@ function normalizeSeller(seller) {
     id: seller.id || slugify(seller.name),  
   };
 } 
+
+function sanitizeImageUrl(value, fallback = null) {
+  if (!value || typeof value !== "string") {
+    return fallback;
+  }
+
+  if (value.startsWith("data:")) {
+    return fallback;
+  }
+
+  return value;
+}
+
+function getListingImageUrl(listingInput) {
+  const candidate = listingInput.imageUrl || listingInput.images?.[0];
+  return sanitizeImageUrl(candidate, null);
+}
+
+async function uploadListingImage(file, userProfile) {
+  if (!supabase || !userProfile?.id) {
+    throw new Error("Supabase is not configured or you are not signed in.");
+  }
+
+  if (!file) {
+    throw new Error("Please upload an image for your listing.");
+  }
+
+  const fileExtension = file.name?.split(".").pop()?.toLowerCase() || "jpg";
+  const filePath = `${userProfile.id}/${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}.${fileExtension}`;
+
+  const { data: signedUpload, error: signedUploadError } = await supabase.storage
+    .from(LISTING_IMAGES_BUCKET)
+    .createSignedUploadUrl(filePath);
+
+  if (signedUploadError) {
+    throw new Error(
+      signedUploadError.message || "Could not create a signed upload URL for the listing image."
+    );
+  }
+
+  const { error: uploadError } = await supabase.storage
+    .from(LISTING_IMAGES_BUCKET)
+    .uploadToSignedUrl(filePath, signedUpload.token, file, {
+      cacheControl: "3600",
+      contentType: file.type || "image/png",
+    });
+
+  if (uploadError) {
+    throw new Error(uploadError.message || "Could not upload listing image.");
+  }
+
+  const { data } = supabase.storage.from(LISTING_IMAGES_BUCKET).getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
+function getLocalListings() {
+  ensureSeedData();
+  return readJson(LISTINGS_KEY, mockListings).map((listing) => ({
+    ...listing,
+    seller: normalizeSeller(listing.seller),
+  }));
+}
+
+function mapDatabaseListing(listing) {
+  return {
+    id: listing.id,
+    title: listing.title,
+    description: listing.description,
+    price: Number(listing.price),
+    category: listing.category,
+    images: [listing.image_url].filter(Boolean),
+    seller: {
+      id: listing.seller_id,
+      name: listing.seller_name || "UTA Student",
+      rating: Number(listing.seller_rating || 0),
+      avatar:
+        listing.seller_avatar ||
+        DEFAULT_AVATAR,
+      verified: true,
+    },
+    distance: Number(listing.distance || 0.5),
+    location: listing.location || "UTA Campus",
+    createdAt: listing.created_at ? new Date(listing.created_at).getTime() : Date.now(),
+    updatedAt: listing.updated_at ? new Date(listing.updated_at).getTime() : undefined,
+  };
+}
+
+async function getDatabaseListings() {
+  const { data, error } = await supabase
+    .from("listings")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return data.map(mapDatabaseListing);
+}
 
 function readJson(key, fallback) {
   try { 
@@ -64,62 +168,124 @@ export function ensureSeedData() {
   }
 }
  
-export function getListings() {
-  ensureSeedData();
-  return readJson(LISTINGS_KEY, mockListings).map((listing) => ({
-    ...listing,  
-    seller: normalizeSeller(listing.seller), 
-  }));
+export async function getListings() {
+  if (!supabase) {
+    return getLocalListings();
+  }
+
+  try {
+    return await getDatabaseListings();
+  } catch {
+    return getLocalListings();
+  }
 }
 
-export function getListingById(id) { 
-  return getListings().find((listing) => listing.id === id); 
+export async function getListingById(id) { 
+  if (!supabase) {
+    return getLocalListings().find((listing) => listing.id === id);
+  }
+
+  try {
+    const { data, error } = await supabase.from("listings").select("*").eq("id", id).single();
+
+    if (error) {
+      throw error;
+    }
+
+    return mapDatabaseListing(data);
+  } catch {
+    return getLocalListings().find((listing) => listing.id === id);
+  }
 }
 
-export function getSellerById(sellerId) {
-  const sellerListing = getListings().find((listing) => listing.seller.id === sellerId); 
-  return sellerListing?.seller || null;
+export async function getSellerById(sellerId) {
+  const listings = await getListingsBySellerId(sellerId);
+  return listings[0]?.seller || null;
 }
 
-export function getListingsBySellerId(sellerId) { 
-  return getListings().filter((listing) => listing.seller.id === sellerId);
+export async function getListingsBySellerId(sellerId) { 
+  if (!supabase) {
+    return getLocalListings().filter((listing) => listing.seller.id === sellerId);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("listings")
+      .select("*")
+      .eq("seller_id", sellerId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return data.map(mapDatabaseListing);
+  } catch {
+    return getLocalListings().filter((listing) => listing.seller.id === sellerId);
+  }
 }
 
-export function getListingsByUserId(userId) {
+export async function getListingsByUserId(userId) {
   return getListingsBySellerId(userId);  
 }
 
-export function addListing(listingInput, userProfile) { 
-  const listings = getListings();
+export async function addListing(listingInput, userProfile) { 
+  const imageUrl = listingInput.imageFile
+    ? await uploadListingImage(listingInput.imageFile, userProfile)
+    : getListingImageUrl(listingInput);
+
+  if (!imageUrl) {
+    throw new Error("Please upload an image for your listing.");
+  }
+
   const newListing = {
-    id: String(Date.now()),
-    title: listingInput.title,
-    description: listingInput.description,
+    title: listingInput.title.trim(),
+    description: listingInput.description.trim(),
     price: Number(listingInput.price), 
     category: listingInput.category,
-    images: listingInput.images,  
+    images: [imageUrl],  
     seller: {
       id: userProfile?.id || slugify(userProfile?.fullName || "UTA Student"),
       name: userProfile?.fullName || "UTA Student",
       rating: 5, 
-      avatar: 
-        userProfile?.profilePicture ||
-        "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&q=80",
+      avatar: userProfile?.profilePicture || DEFAULT_AVATAR,
       verified: true,
     },
     distance: Number(listingInput.distance || 0.5), 
     location: listingInput.location || "UTA Campus",
     createdAt: Date.now(), 
   };
- 
-  const nextListings = [newListing, ...listings];  
-  writeJson(LISTINGS_KEY, nextListings);
-  return newListing;
+
+  if (!supabase || !userProfile?.id) {
+    throw new Error("Supabase is not configured or you are not signed in.");
+  }
+
+  const { data, error } = await supabase
+    .from("listings")
+      .insert({
+        seller_id: userProfile.id,
+        seller_name: newListing.seller.name,
+        seller_avatar: sanitizeImageUrl(newListing.seller.avatar, DEFAULT_AVATAR),
+        title: newListing.title,
+        description: newListing.description,
+        price: newListing.price,
+      category: newListing.category,
+      image_url: imageUrl,
+      location: newListing.location,
+      distance: newListing.distance,
+      })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(error.message || "Could not save listing to Supabase.");
+  }
+
+  return mapDatabaseListing(data);
 }
 
-export function updateListing(listingId, listingInput, userProfile) {
-  const listings = getListings(); 
-  const existingListing = listings.find((listing) => listing.id === listingId);
+export async function updateListing(listingId, listingInput, userProfile) {
+  const existingListing = await getListingById(listingId);
 
   if (!existingListing) { 
     throw new Error("Listing not found.");
@@ -129,29 +295,64 @@ export function updateListing(listingId, listingInput, userProfile) {
     throw new Error("You can only edit your own listings."); 
   }
 
+  const imageUrl = listingInput.imageFile
+    ? await uploadListingImage(listingInput.imageFile, userProfile)
+    : getListingImageUrl(listingInput) || existingListing.images[0];
+
   const updatedListing = {
     ...existingListing, 
-    title: listingInput.title,
-    description: listingInput.description,
+    title: listingInput.title.trim(),
+    description: listingInput.description.trim(),
     price: Number(listingInput.price), 
     category: listingInput.category,
-    images: listingInput.images,
+    images: [imageUrl],
     distance: Number(listingInput.distance || existingListing.distance || 0.5), 
     location: listingInput.location || "UTA Campus",
     updatedAt: Date.now(),
   };
 
-  const nextListings = listings.map((listing) =>  
-    listing.id === listingId ? updatedListing : listing
-  );
- 
-  writeJson(LISTINGS_KEY, nextListings);
-  return updatedListing;
+  if (!supabase || !userProfile?.id || !isUuid(listingId)) {
+    const nextListings = getLocalListings().map((listing) =>  
+      listing.id === listingId ? updatedListing : listing
+    );
+    writeJson(LISTINGS_KEY, nextListings);
+    return updatedListing;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("listings")
+      .update({
+        title: updatedListing.title,
+        description: updatedListing.description,
+        price: updatedListing.price,
+        category: updatedListing.category,
+        image_url: imageUrl,
+        location: updatedListing.location,
+        distance: updatedListing.distance,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", listingId)
+      .eq("seller_id", userProfile.id)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return mapDatabaseListing(data);
+  } catch {
+    const nextListings = getLocalListings().map((listing) =>  
+      listing.id === listingId ? updatedListing : listing
+    );
+    writeJson(LISTINGS_KEY, nextListings);
+    return updatedListing;
+  }
 } 
 
-export function deleteListing(listingId, userProfile) { 
-  const listings = getListings();
-  const existingListing = listings.find((listing) => listing.id === listingId);  
+export async function deleteListing(listingId, userProfile) { 
+  const existingListing = await getListingById(listingId);  
 
   if (!existingListing) {
     throw new Error("Listing not found."); 
@@ -161,13 +362,34 @@ export function deleteListing(listingId, userProfile) {
     throw new Error("You can only delete your own listings.");  
   }
 
-  const nextListings = listings.filter((listing) => listing.id !== listingId);
-  const nextConversations = getConversations().filter(
-    (conversation) => conversation.listingId !== listingId 
-  );
- 
-  writeJson(LISTINGS_KEY, nextListings);
-  writeJson(CONVERSATIONS_KEY, nextConversations);
+  if (!supabase || !userProfile?.id || !isUuid(listingId)) {
+    const nextListings = getLocalListings().filter((listing) => listing.id !== listingId);
+    const nextConversations = getConversations().filter(
+      (conversation) => conversation.listingId !== listingId 
+    );
+    writeJson(LISTINGS_KEY, nextListings);
+    writeJson(CONVERSATIONS_KEY, nextConversations);
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from("listings")
+      .delete()
+      .eq("id", listingId)
+      .eq("seller_id", userProfile.id);
+
+    if (error) {
+      throw error;
+    }
+  } catch {
+    const nextListings = getLocalListings().filter((listing) => listing.id !== listingId);
+    const nextConversations = getConversations().filter(
+      (conversation) => conversation.listingId !== listingId 
+    );
+    writeJson(LISTINGS_KEY, nextListings);
+    writeJson(CONVERSATIONS_KEY, nextConversations);
+  }
 }
   
 export function getConversations() {
@@ -238,7 +460,7 @@ export async function getConversationsForUser(userProfile) {
 } 
 
 async function getOrCreateDatabaseConversation(listingId, userProfile) {
-  const listing = getListingById(listingId);
+  const listing = await getListingById(listingId);
  
   if (!supabase || !userProfile?.id || !listing) {
     return null; 
