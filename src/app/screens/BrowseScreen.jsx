@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search, Plus, MapPin, Star, Shield, MessageCircle, User, LogOut, SlidersHorizontal } from "lucide-react";
-import { getListings } from "../data/marketplaceStore";
+import { getListings, getUnreadConversationCount } from "../data/marketplaceStore";
 import { useAuth } from "../context/AuthContext";
 
 export default function BrowseScreen() {
@@ -12,6 +12,7 @@ export default function BrowseScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [maxPrice, setMaxPrice] = useState(1000);
+  const [unreadConversationCount, setUnreadConversationCount] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -32,6 +33,46 @@ export default function BrowseScreen() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadUnreadConversationCount = async () => {
+      if (!user?.id) {
+        if (isMounted) {
+          setUnreadConversationCount(0);
+        }
+        return;
+      }
+
+      const count = await getUnreadConversationCount(user);
+      if (isMounted) {
+        setUnreadConversationCount(count);
+      }
+    };
+
+    void loadUnreadConversationCount();
+
+    const intervalId = window.setInterval(() => {
+      void loadUnreadConversationCount();
+    }, 15000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadUnreadConversationCount();
+      }
+    };
+
+    window.addEventListener("focus", loadUnreadConversationCount);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", loadUnreadConversationCount);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [user]);
 
   const categories = ["All", ...new Set(listings.map((item) => item.category))];
 
@@ -54,10 +95,15 @@ export default function BrowseScreen() {
           </div>
           <button
             onClick={() => navigate("/messages")}
-            className="rounded-xl border border-[#E2E8F0] p-2 text-[#475569] transition hover:bg-[#F8FAFC]"
+            className="relative rounded-xl border border-[#E2E8F0] p-2 text-[#475569] transition hover:bg-[#F8FAFC]"
             aria-label="Open messages"
           >
             <MessageCircle className="h-5 w-5" />
+            {unreadConversationCount > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#DC2626] text-[10px] font-bold text-white">
+                !
+              </span>
+            )}
           </button>
           <button
             onClick={() => navigate("/profile")}

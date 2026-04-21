@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { ArrowLeft, Send } from "lucide-react";
 import { toast } from "sonner";
-import { getConversationByListingIdForUser, getListingById, sendDatabaseMessage } from "../data/marketplaceStore";
+import {
+  getConversationByListingIdForUser,
+  getListingById,
+  markConversationsRead,
+  sendDatabaseMessage,
+} from "../data/marketplaceStore";
 import { useAuth } from "../context/AuthContext";
 
 export default function ChatScreen() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
+  const conversationId = searchParams.get("conversation");
   const [inputText, setInputText] = useState("");
   const [listing, setListing] = useState(null);
   const [conversation, setConversation] = useState(null);
@@ -17,6 +24,7 @@ export default function ChatScreen() {
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef(null);
   const messages = conversation?.messages || [];
+  const resolvedListing = listing || conversation?.listing || null;
 
   useEffect(() => {
     let isMounted = true;
@@ -42,10 +50,13 @@ export default function ChatScreen() {
     let isMounted = true;
 
     setIsLoading(true);
-    getConversationByListingIdForUser(id, user)
+    getConversationByListingIdForUser(id, user, conversationId)
       .then((nextConversation) => {
         if (isMounted) {
           setConversation(nextConversation);
+          if (nextConversation) {
+            markConversationsRead(user, [nextConversation]);
+          }
         }
       })
       .catch(() => {
@@ -62,13 +73,13 @@ export default function ChatScreen() {
     return () => {
       isMounted = false;
     };
-  }, [id, user]);
+  }, [conversationId, id, user]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  if (isLoadingListing) {
+  if (isLoadingListing && !conversation?.listing) {
     return (
       <div className="min-h-screen bg-[#F4F6F9] p-6">
         <div className="mx-auto max-w-3xl rounded-2xl bg-white p-8 text-center shadow-sm">Loading conversation...</div>
@@ -76,7 +87,7 @@ export default function ChatScreen() {
     );
   }
 
-  if (!listing) {
+  if (!resolvedListing) {
     return (
       <div className="min-h-screen bg-[#F4F6F9] p-6">
         <div className="mx-auto max-w-3xl rounded-2xl bg-white p-8 text-center shadow-sm">Conversation not found.</div>
@@ -108,14 +119,19 @@ export default function ChatScreen() {
       ...(currentConversation || {
         id: `local-${id}`,
         listingId: id,
-        participantName: listing.seller.name,
+        participantName: resolvedListing.seller.name,
         messages: [],
       }),
       messages: [...(currentConversation?.messages || []), optimisticMessage],
     }));
 
     try {
-      const savedMessage = await sendDatabaseMessage(id, user, nextMessage);
+      const savedMessage = await sendDatabaseMessage(
+        id,
+        user,
+        nextMessage,
+        conversation?.id || conversationId
+      );
       setConversation((currentConversation) => ({
         ...currentConversation,
         messages: (currentConversation?.messages || []).map((message) =>
@@ -141,10 +157,16 @@ export default function ChatScreen() {
       <div className="mx-auto flex h-[80vh] max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-sm">
         <div className="flex items-center gap-3 border-b border-[#E5E7EB] p-4">
           <button onClick={() => navigate("/messages")} className="text-[#2563EB]"><ArrowLeft className="h-4 w-4" /></button>
-          <img src={listing.seller.avatar} alt={listing.seller.name} className="h-9 w-9 rounded-full object-cover" />
+          <img
+            src={conversation?.participantAvatar || resolvedListing.seller.avatar}
+            alt={conversation?.participantName || resolvedListing.seller.name}
+            className="h-9 w-9 rounded-full object-cover"
+          />
           <div>
-            <p className="text-sm font-semibold text-[#111827]">{listing.seller.name}</p>
-            <p className="text-xs text-[#6B7280]">{listing.title}</p>
+            <p className="text-sm font-semibold text-[#111827]">
+              {conversation?.participantName || resolvedListing.seller.name}
+            </p>
+            <p className="text-xs text-[#6B7280]">{resolvedListing.title}</p>
           </div>
         </div>
 

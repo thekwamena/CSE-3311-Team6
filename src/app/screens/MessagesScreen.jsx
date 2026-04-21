@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { MessageCircle, Search } from "lucide-react";
 import { toast } from "sonner";
-import { getConversationsForUser, getListingById } from "../data/marketplaceStore";
+import {
+  getConversationsForUser,
+  getListingById,
+  markConversationsRead,
+} from "../data/marketplaceStore";
 import { useAuth } from "../context/AuthContext";
 
 export default function MessagesScreen() {
@@ -33,6 +37,7 @@ export default function MessagesScreen() {
           return;
         }
 
+        markConversationsRead(user, hydratedConversations);
         setConversations(
           hydratedConversations
             .filter((conversation) => Boolean(conversation.listing))
@@ -84,10 +89,16 @@ export default function MessagesScreen() {
             filtered.map((conversation) => (
               <button
                 key={conversation.id}
-                onClick={() => navigate(`/chat/${conversation.listingId}`)}
+                onClick={() =>
+                  navigate(`/chat/${conversation.listingId}?conversation=${conversation.id}`)
+                }
                 className="flex w-full items-center gap-3 p-4 text-left hover:bg-[#F9FAFB]"
               >
-                <img src={conversation.listing.images[0]} alt={conversation.listing.title} className="h-14 w-14 rounded-xl object-cover" />
+                <img
+                  src={conversation.participantAvatar || conversation.listing.images[0]}
+                  alt={conversation.participantName}
+                  className="h-14 w-14 rounded-full object-cover"
+                />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-[#111827]">{conversation.participantName}</p>
                   <p className="truncate text-xs text-[#6B7280]">{conversation.listing.title}</p>

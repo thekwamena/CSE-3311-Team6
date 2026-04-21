@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 const LISTINGS_KEY = "marketplace:listings"; 
 const CONVERSATIONS_KEY = "marketplace:conversations";
 const REVIEWS_KEY = "marketplace:reviews";
+const CONVERSATION_READS_KEY = "marketplace:conversationReads";
 const LISTING_IMAGES_BUCKET = "listing-images";
 const DEFAULT_AVATAR =
   "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&q=80";
@@ -42,6 +43,60 @@ function sanitizeImageUrl(value, fallback = null) {
   }
 
   return value;
+}
+
+async function getProfilesByIds(ids) {
+  const uniqueIds = [...new Set((ids || []).filter(Boolean))];
+
+  if (!supabase || uniqueIds.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, avatar_url")
+    .in("id", uniqueIds);
+
+  if (error) {
+    return new Map();
+  }
+
+  return new Map(
+    data.map((profile) => [
+      profile.id,
+      {
+        fullName: profile.full_name,
+        avatarUrl: sanitizeImageUrl(profile.avatar_url, DEFAULT_AVATAR) || DEFAULT_AVATAR,
+      },
+    ])
+  );
+}
+
+async function getSellerRatingsByIds(ids) {
+  const uniqueIds = [...new Set((ids || []).filter(Boolean))];
+
+  if (!supabase || uniqueIds.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await supabase
+    .from("seller_ratings")
+    .select("seller_id, average_rating, review_count")
+    .in("seller_id", uniqueIds);
+
+  if (error) {
+    return new Map();
+  }
+
+  return new Map(
+    data.map((row) => [
+      row.seller_id,
+      {
+        averageRating: Number(row.average_rating || 0),
+        reviewCount: Number(row.review_count || 0),
+      },
+    ])
+  );
 }
 
 function getListingImageUrl(listingInput) {
@@ -120,6 +175,34 @@ function mapDatabaseListing(listing) {
   };
 }
 
+async function enrichDatabaseListings(listings) {
+  if (!Array.isArray(listings) || listings.length === 0) {
+    return [];
+  }
+
+  const sellerIds = listings.map((listing) => listing.seller.id).filter(Boolean);
+  const [profileMap, ratingMap] = await Promise.all([
+    getProfilesByIds(sellerIds),
+    getSellerRatingsByIds(sellerIds),
+  ]);
+
+  return listings.map((listing) => {
+    const sellerProfile = profileMap.get(listing.seller.id);
+    const sellerRating = ratingMap.get(listing.seller.id);
+
+    return {
+      ...listing,
+      seller: {
+        ...listing.seller,
+        name: sellerProfile?.fullName || listing.seller.name,
+        avatar: sellerProfile?.avatarUrl || sanitizeImageUrl(listing.seller.avatar, DEFAULT_AVATAR) || DEFAULT_AVATAR,
+        rating: sellerRating?.averageRating ?? listing.seller.rating,
+        reviewCount: sellerRating?.reviewCount ?? listing.seller.reviewCount ?? 0,
+      },
+    };
+  });
+}
+
 async function getDatabaseListings() {
   const { data, error } = await supabase
     .from("listings")
@@ -130,7 +213,7 @@ async function getDatabaseListings() {
     throw error;
   }
 
-  return data.map(mapDatabaseListing);
+  return enrichDatabaseListings(data.map(mapDatabaseListing));
 }
 
 function readJson(key, fallback) {
@@ -145,6 +228,35 @@ function readJson(key, fallback) {
 function writeJson(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }  
+
+function getConversationReadsKey(userId) {
+  return `${CONVERSATION_READS_KEY}:${userId}`;
+}
+
+function getConversationReads(userId) {
+  if (!userId) {
+    return {};
+  }
+
+  return readJson(getConversationReadsKey(userId), {});
+}
+
+function setConversationReads(userId, reads) {
+  if (!userId) {
+    return;
+  }
+
+  writeJson(getConversationReadsKey(userId), reads);
+}
+
+function getConversationLastMessageTime(conversation) {
+  const lastMessage = conversation?.messages?.[conversation.messages.length - 1];
+  if (lastMessage?.createdAt) {
+    return new Date(lastMessage.createdAt).getTime();
+  }
+
+  return Number(conversation?.updatedAt || 0);
+}
 
 function getInitialConversations() {
   return mockListings.slice(0, 3).map((listing, index) => ({
@@ -192,7 +304,8 @@ export async function getListingById(id) {
       throw error;
     }
 
-    return mapDatabaseListing(data);
+    const [listing] = await enrichDatabaseListings([mapDatabaseListing(data)]);
+    return listing;
   } catch {
     return getLocalListings().find((listing) => listing.id === id);
   }
@@ -219,7 +332,7 @@ export async function getListingsBySellerId(sellerId) {
       throw error;
     }
 
-    return data.map(mapDatabaseListing);
+    return enrichDatabaseListings(data.map(mapDatabaseListing));
   } catch {
     return getLocalListings().filter((listing) => listing.seller.id === sellerId);
   }
@@ -281,7 +394,8 @@ export async function addListing(listingInput, userProfile) {
     throw new Error(error.message || "Could not save listing to Supabase.");
   }
 
-  return mapDatabaseListing(data);
+  const [listing] = await enrichDatabaseListings([mapDatabaseListing(data)]);
+  return listing;
 }
 
 export async function updateListing(listingId, listingInput, userProfile) {
@@ -341,7 +455,8 @@ export async function updateListing(listingId, listingInput, userProfile) {
       throw error;
     }
 
-    return mapDatabaseListing(data);
+    const [listing] = await enrichDatabaseListings([mapDatabaseListing(data)]);
+    return listing;
   } catch {
     const nextListings = getLocalListings().map((listing) =>  
       listing.id === listingId ? updatedListing : listing
@@ -397,16 +512,27 @@ export function getConversations() {
   return readJson(CONVERSATIONS_KEY, getInitialConversations());
 }
 
-function mapDatabaseConversation(conversation, currentUserId) {
+function mapDatabaseConversation(conversation, currentUserId, profileMap = new Map()) {
   const messages = conversation.chat_messages || [];
+  const isBuyerView = conversation.buyer_id === currentUserId;
+  const participantId = isBuyerView ? conversation.seller_id : conversation.buyer_id;
+  const participantProfile = profileMap.get(participantId);
+  const sellerProfile = profileMap.get(conversation.seller_id);
   
   return {
     id: conversation.id,
     listingId: conversation.listing_id,
+    participantId,
     participantName:
-      conversation.buyer_id === currentUserId 
-        ? conversation.seller_name
-        : conversation.buyer_name || "UTA Student",
+      participantProfile?.fullName ||
+      (isBuyerView ? conversation.seller_name : conversation.buyer_name) ||
+      "UTA Student",
+    participantAvatar:
+      participantProfile?.avatarUrl ||
+      (isBuyerView
+        ? sanitizeImageUrl(conversation.seller_avatar, DEFAULT_AVATAR)
+        : DEFAULT_AVATAR) ||
+      DEFAULT_AVATAR,
     updatedAt: new Date(conversation.updated_at || conversation.created_at).getTime(),  
     listing: {
       id: conversation.listing_id,
@@ -415,7 +541,10 @@ function mapDatabaseConversation(conversation, currentUserId) {
       seller: {
         id: conversation.seller_id,
         name: conversation.seller_name, 
-        avatar: conversation.seller_avatar, 
+        avatar:
+          sellerProfile?.avatarUrl ||
+          sanitizeImageUrl(conversation.seller_avatar, DEFAULT_AVATAR) ||
+          DEFAULT_AVATAR,
       },
     },
     messages: messages.map((message) => ({
@@ -453,11 +582,59 @@ export async function getConversationsForUser(userProfile) {
       return getConversations();
     }
 
-    return data.map((conversation) => mapDatabaseConversation(conversation, userProfile.id)); 
+    const profileMap = await getProfilesByIds(
+      data.flatMap((conversation) => [conversation.seller_id, conversation.buyer_id])
+    );
+
+    return data.map((conversation) =>
+      mapDatabaseConversation(conversation, userProfile.id, profileMap)
+    ); 
   } catch {
     return getConversations();
   }  
 } 
+
+export async function getUnreadConversationCount(userProfile) {
+  if (!userProfile?.id) {
+    return 0;
+  }
+
+  const conversations = await getConversationsForUser(userProfile);
+  const reads = getConversationReads(userProfile.id);
+
+  return conversations.filter((conversation) => {
+    const lastMessage = conversation.messages?.[conversation.messages.length - 1];
+    if (!lastMessage || lastMessage.sender === "user") {
+      return false;
+    }
+
+    const lastMessageTime = getConversationLastMessageTime(conversation);
+    const lastReadTime = Number(reads[conversation.id] || 0);
+    return lastMessageTime > lastReadTime;
+  }).length;
+}
+
+export function markConversationsRead(userProfile, conversations) {
+  if (!userProfile?.id || !Array.isArray(conversations) || conversations.length === 0) {
+    return;
+  }
+
+  const reads = getConversationReads(userProfile.id);
+  const nextReads = { ...reads };
+
+  conversations.forEach((conversation) => {
+    if (!conversation?.id) {
+      return;
+    }
+
+    const lastMessageTime = getConversationLastMessageTime(conversation);
+    if (lastMessageTime > 0) {
+      nextReads[conversation.id] = lastMessageTime;
+    }
+  });
+
+  setConversationReads(userProfile.id, nextReads);
+}
 
 async function getOrCreateDatabaseConversation(listingId, userProfile) {
   const listing = await getListingById(listingId);
@@ -471,7 +648,7 @@ async function getOrCreateDatabaseConversation(listingId, userProfile) {
       .from("chat_conversations")
       .select("*") 
       .eq("listing_id", listingId)  
-      .eq("buyer_id", userProfile.id)
+      .or(`buyer_id.eq.${userProfile.id},seller_id.eq.${userProfile.id}`)
       .maybeSingle();
 
     if (existingError) { 
@@ -508,10 +685,54 @@ async function getOrCreateDatabaseConversation(listingId, userProfile) {
   }  
 }
 
-export async function getConversationByListingIdForUser(listingId, userProfile) {
+async function getDatabaseConversationById(conversationId, userProfile) {
+  if (!supabase || !userProfile?.id || !conversationId) {
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("chat_conversations")
+      .select(`
+        *,
+        chat_messages (
+          id,
+          sender_id,
+          body,
+          created_at
+        )
+      `)
+      .eq("id", conversationId)
+      .or(`buyer_id.eq.${userProfile.id},seller_id.eq.${userProfile.id}`)
+      .order("created_at", { referencedTable: "chat_messages", ascending: true })
+      .maybeSingle();
+
+    if (error || !data) {
+      return null;
+    }
+
+    const profileMap = await getProfilesByIds([data.seller_id, data.buyer_id]);
+    return mapDatabaseConversation(data, userProfile.id, profileMap);
+  } catch {
+    return null;
+  }
+}
+
+export async function getConversationByListingIdForUser(
+  listingId,
+  userProfile,
+  conversationId = null
+) {
   if (!supabase || !userProfile?.id) {
     return getConversationByListingId(listingId); 
-  } 
+  }
+
+  if (conversationId) {
+    const matchedConversation = await getDatabaseConversationById(conversationId, userProfile);
+    if (matchedConversation) {
+      return matchedConversation;
+    }
+  }
 
   const conversation = await getOrCreateDatabaseConversation(listingId, userProfile);
   if (!conversation) {
@@ -536,9 +757,11 @@ export async function getConversationByListingIdForUser(listingId, userProfile) 
  
     if (error) {
       return getConversationByListingId(listingId);
-    }  
+    }
 
-    return mapDatabaseConversation(data, userProfile.id);
+    const profileMap = await getProfilesByIds([data.seller_id, data.buyer_id]);
+
+    return mapDatabaseConversation(data, userProfile.id, profileMap);
   } catch {
     return getConversationByListingId(listingId); 
   }
@@ -734,13 +957,15 @@ export function sendMessage(listingId, sender, text) {
   return nextConversations.find((conversation) => conversation.listingId === listingId);
 }
 
-export async function sendDatabaseMessage(listingId, userProfile, text) {  
+export async function sendDatabaseMessage(listingId, userProfile, text, conversationId = null) {  
   if (!supabase || !userProfile?.id) {
     const conversation = sendMessage(listingId, "user", text); 
     return conversation.messages[conversation.messages.length - 1];
   }
 
-  const conversation = await getOrCreateDatabaseConversation(listingId, userProfile);
+  const existingConversation =
+    conversationId ? await getDatabaseConversationById(conversationId, userProfile) : null;
+  const conversation = existingConversation || (await getOrCreateDatabaseConversation(listingId, userProfile));
  
   if (!conversation) { 
     const localConversation = sendMessage(listingId, "user", text);
